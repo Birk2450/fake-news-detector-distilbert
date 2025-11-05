@@ -1,0 +1,15 @@
+# Ignore data, cache, and model outputs
+data/*.csv
+!data/README.md  # keep dataset info if you add one later
+
+# Python cache and virtual envs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.env/
+.ipynb_checkpoints/
+
+# Large model files
+models/checkpoints/
