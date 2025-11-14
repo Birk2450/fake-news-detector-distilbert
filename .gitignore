@@ -1,15 +1,40 @@
-# Ignore data, cache, and model outputs
-data/*.csv
-!data/README.md  # keep dataset info if you add one later
+# ---- DATA ----
+# Ignore generated train/val/test splits
+data/train.csv
+data/val.csv
+data/test.csv
+data/merged_dataset.csv
 
-# Python cache and virtual envs
+# Keep raw input data (Fake.csv, True.csv)
+!data/Fake.csv
+!data/True.csv
+
+# Keep README
+!data/README.md
+
+
+# ---- PYTHON / ENV ----
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .venv/
 .env/
-.ipynb_checkpoints/
 
-# Large model files
+
+# ---- NOTEBOOK ARTIFACTS ----
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+
+# ---- MODEL OUTPUTS ----
+# Ignore large training artifacts:
 models/checkpoints/
+models/distilbert_finetuned/
+
+
+# ---- HUGGINGFACE TRAINER OUTPUT ----
+results/
+logs/
+notebooks/results/
+notebooks/logs/
