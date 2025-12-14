@@ -1,0 +1,17 @@
+FROM python:3.11-slim
+WORKDIR /app
+
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+ENV PYTHONPATH=/app
+ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+ENV STREAMLIT_SERVER_PORT=8501
+EXPOSE 8501
+
+CMD ["streamlit", "run", "app/ui.py"]

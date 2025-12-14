@@ -38,3 +38,10 @@ results/
 logs/
 notebooks/results/
 notebooks/logs/
+
+# ----- DOCKER -----
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
