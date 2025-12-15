@@ -32,8 +32,8 @@ course at the **Universidad Politécnica de Madrid (UPM)**.
 
 The easiest way to run the app:
 
-docker build -t fake-news-detector .
-docker run --rm -p 8501:8501 fake-news-detector
+- docker build -t fake-news-detector .
+- docker run --rm -p 8501:8501 fake-news-detector
 
 Open in your browser:
 http://localhost:8501
