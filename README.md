@@ -1,60 +1,79 @@
-# Fake News Detection with DistilBERT
+# Fake News Detector – DistilBERT
 
-This project is part of the *Deep Learning and Software Engineering* course at UPM.  
-Our goal is to classify news articles as 'real' or 'fake' using a fine-tuned DistilBERT model.
+A lightweight fake news detection system built with **DistilBERT**, featuring a
+clean web interface and fully containerized deployment.
 
-# Fake News Detector – DistilBERT (M3)
+This project was developed as part of the *Deep Learning and Software Engineering*
+course at the **Universidad Politécnica de Madrid (UPM)**.
 
-This project provides a Dockerized DistilBERT-based Fake News Detector with a simple web UI (Streamlit).
-The Docker image runs fully on CPU and is compatible with any machine with Docker installed.
+---
 
-Requirements
-1. Docker (tested with Docker Desktop)
-2. No GPU required
+## What it does
 
+- Classifies news articles as **Real** or **Fake**
+- Displays confidence scores and interpretability categories
+- Stores predictions locally using **SQLite**
+- Provides filtering and statistics over past predictions
+- Runs entirely on **CPU** (no GPU required)
 
-Steps to run with Docker (recommended):
+---
 
-1. Build the image:
+## Tech Stack
+
+- **Model:** DistilBERT (fine-tuned)
+- **Frameworks:** PyTorch, Hugging Face Transformers
+- **UI:** Streamlit
+- **Persistence:** SQLite
+- **Deployment:** Docker
+
+---
+
+## Quick Start (Docker)
+
+The easiest way to run the app:
+
 docker build -t fake-news-detector .
-
-2. Run the container:
 docker run --rm -p 8501:8501 fake-news-detector
 
-3. Open in browser:
+Open in your browser:
 http://localhost:8501
 
+---
 
-To run locally (without Docker):
+## Local Setup (Optional)
 
-python -m venv .venv
-source .venv/bin/activate  # Windows: .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-export PYTHONPATH=.        # Windows PowerShell: $env:PYTHONPATH="."
-streamlit run app/ui.py
+- python -m venv .venv
+- source .venv/bin/activate # Windows: ..venv\Scripts\Activate.ps1
+- pip install -r requirements.txt
+- export PYTHONPATH=. # Windows: $env:PYTHONPATH="."
+- streamlit run app/ui.py
 
+---
 
-Project structure:
-app/            # inference + Streamlit UI
-models/best/    # trained DistilBERT model (final configuration)
-notebooks/      # training & experiments (M2)
-Dockerfile      # Docker image definition
-requirements.txt
+## Project Structure
 
+- app/ # Streamlit UI, inference, database logic
+- models/best/ # Final trained DistilBERT model
+- notebooks/ # Training & experimentation
+- data/ # SQLite database (auto-generated)
+- Dockerfile
 
-Notes for team members:
+---
 
-- The UI can be freely modified in app/ui.py
-- Do NOT commit .venv/
-- After UI changes, rebuild Docker image:
-    docker build -t fake-news-detector .
+## Notes
 
+- The model expects **text input** (title + body). Avoid pasting only URLs.
+- All predictions are stored locally in `data/predictions.sqlite3`.
+- The Docker image uses **CPU-only PyTorch** for maximum compatibility.
 
-Sharing Docker image (demo compatibility test)
+---
 
-Export image:
-docker save fake-news-detector -o fake-news-detector.tar
+## Academic Context
 
-Load on another machine:
-docker load -i fake-news-detector.tar
-docker run --rm -p 8501:8501 fake-news-detector
+This project demonstrates the full lifecycle of a deep learning system:
+**training, evaluation, deployment, and usability**.
+
+Developed at the Universidad Politécnica de Madrid (UPM) by students:
+- Birk Bregendahl
+- Karol Swiderski
+- Agustin Tamagnone
