@@ -38,3 +38,14 @@ results/
 logs/
 notebooks/results/
 notebooks/logs/
+
+# macOS junk
+.DS_Store
+
+# Experiment outputs
+models/
+experiment_results.csv
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
