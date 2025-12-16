@@ -45,3 +45,13 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 .DS_Store
+
+# macOS junk
+.DS_Store
+
+# Experiment outputs
+models/
+experiment_results.csv
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
