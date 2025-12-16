@@ -13,15 +13,15 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN pip install --no-cache-dir --upgrade pip
 
-# Torch CPU desde el index oficial (mejor para Docker CPU)
+# Install CPU-only torch once
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install only app dependencies
+COPY requirements.app.txt .
+RUN pip install --no-cache-dir -r requirements.app.txt
 
 COPY . .
 
-# Carpeta para SQLite (y para montar volume)
 RUN mkdir -p /app/data
 
 EXPOSE 8501

@@ -1,232 +1,430 @@
-# app/ui.py
+import base64
+import html
+import sys
 from pathlib import Path
+
 import streamlit as st
 
+ROOT_DIR = Path(__file__).resolve().parents[1]  # repo root (fake-news-detector-distilbert)
+sys.path.insert(0, str(ROOT_DIR))
+
 from inference import predict
-from db import init_db, save_prediction, fetch_filtered, fetch_sources, fetch_stats
+from db import init_db, save_prediction, fetch_filtered, fetch_sources, fetch_stats, delete_prediction
 
-
-# -------------------------
-# Page config + DB init
-# -------------------------
-st.set_page_config(page_title="Fake News Detector · DistilBERT", layout="wide")
+# -----------------------#
+# Page config + DB init  #
+# -----------------------#
+st.set_page_config(page_title="Fake News Detector", layout="wide")
 init_db()
 
-APP_DIR = Path(__file__).resolve().parent
-LOGO_PATH = APP_DIR / "assets" / "upm-logo.png"
+# ----------------#
+# Helpers         #
+# ----------------#
+def _find_logo_path() -> Path | None:
+    candidates = [
+        ROOT_DIR / "app" / "assets" / "upm-logo.png",
+        ROOT_DIR / "app" / "assets" / "upm_logo.png",
+        ROOT_DIR / "assets" / "upm-logo.png",
+        ROOT_DIR / "upm-logo.png",
+        ROOT_DIR / "upm-logo.jpeg",
+        ROOT_DIR / "upm-logo.jpg",
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    return None
 
 
-# -------------------------
-# Styles
-# -------------------------
-st.markdown(
-    """
-    <style>
-      /* Make main content a bit narrower for nicer reading */
-      .block-container {
-        padding-top: 3rem;
-        max-width: 1200px;
-      }
-
-      /* Navbar container */
-      .nav-wrap {
-        width: 100%;
-        margin-bottom: 1.2rem;
-      }
-
-      .nav {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        padding: 0.9rem 1.1rem;
-        border-radius: 16px;
-        background: rgba(255,255,255,0.035);
-        border: 1px solid rgba(255,255,255,0.09);
-        box-shadow: 0 12px 28px rgba(0,0,0,0.22);
-      }
-
-      .nav-left {
-        display: flex;
-        align-items: center;
-        gap: 0.85rem;
-        min-width: 0;
-      }
-
-      .nav-title {
-        font-size: 1.25rem;
-        font-weight: 750;
-        line-height: 1.15;
-        margin: 0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .nav-subtitle {
-        font-size: 0.92rem;
-        opacity: 0.72;
-        margin-top: 0.15rem;
-      }
-
-      .badge {
-        font-size: 0.88rem;
-        padding: 0.38rem 0.75rem;
-        border-radius: 999px;
-        border: 1px solid rgba(255,255,255,0.12);
-        background: rgba(255,255,255,0.05);
-        opacity: 0.92;
-        white-space: nowrap;
-      }
-
-      /* Result card */
-      .result-card {
-        padding: 0.95rem 1rem;
-        border-radius: 14px;
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.08);
-        margin-top: 0.75rem;
-      }
-      .result-title {
-        font-size: 1.1rem;
-        font-weight: 750;
-        margin-bottom: 0.35rem;
-      }
-      .muted {
-        opacity: 0.78;
-        font-size: 0.95rem;
-      }
-
-      /* Sidebar title spacing */
-      section[data-testid="stSidebar"] .block-container {
-        padding-top: 1rem;
-      }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+def _img_to_base64(path: Path) -> str:
+    return base64.b64encode(path.read_bytes()).decode("utf-8")
 
 
-def render_navbar():
-    # Use columns for a stable alignment (logo | title | badge)
-    c1, c2, c3 = st.columns([0.10, 0.65, 0.25], vertical_alignment="center")
-
-    with c1:
-        if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), width=56)
-        else:
-            st.write("UPM")
-
-    with c2:
-        st.markdown(
-            """
-            <div>
-              <div class="nav-title">Fake News Detector · DistilBERT</div>
-              <div class="nav-subtitle">Deep Learning and Software Engineering</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with c3:
-        st.markdown(
-            """<div style="text-align:right;"><span class="badge">Universidad Politécnica de Madrid</span></div>""",
-            unsafe_allow_html=True,
-        )
+def category_class(category: str) -> str:
+    cat = (category or "").lower()
+    if "false" in cat:
+        return "cat-false"
+    if "ambiguous" in cat:
+        return "cat-amb"
+    if "true" in cat:
+        return "cat-true"
+    return "cat-amb"
 
 
-def render_rows(rows):
+def ensure_state_defaults():
+    st.session_state.setdefault("form_version", 0)
+    st.session_state.setdefault("last_result", None)
+
+
+def reset_form():
+    st.session_state["form_version"] += 1
+    st.session_state["last_result"] = None
+    st.rerun()
+
+
+def render_rows(rows, context: str = "all"):
     if not rows:
         st.info("No predictions found for current filters.")
         return
 
     for r in rows:
-        st.markdown(
-            f"**#{r['id']}** · {r['created_at']} · "
-            f"**{r['label']}** ({r['confidence_pct']:.2f}%) · `{r['category']}`"
-        )
-        if r.get("source"):
-            st.caption(f"Source: {r['source']}")
+        label = (r.get("label") or "").strip()
+        conf = float(r.get("confidence_pct") or 0.0)
+        created_at = (r.get("created_at") or "").strip()
+        rid = int(r.get("id"))
 
-        if r.get("title"):
-            st.write("**Title:**", r["title"])
+        source = (r.get("source") or "").strip()
+        title = (r.get("title") or "").strip()
+        body = (r.get("body") or "").strip()
+        category = (r.get("category") or "").strip()
 
-        preview = r.get("input_text", "") or ""
-        st.caption((preview[:200] + "…") if len(preview) > 200 else preview)
+        full_text = body if body else (r.get("input_text") or "").strip()
+        full_text_safe = html.escape(full_text)
 
-        with st.expander("Show full input"):
-            st.write(preview)
+        badge_cls = category_class(category)
 
-        st.write("---")
+        # --- header row: left info + right delete button
+        h1, h2 = st.columns([6, 0.5])
+        with h1:
+            st.markdown(
+                f"""
+                <div class="card">
+                  <div class="card-top">
+                    <div class="meta">
+                      <span class="rid">#{rid}</span>
+                      <span class="dot">•</span>
+                      <span class="time">{html.escape(created_at)}</span>
+                      <span class="dot">•</span>
+                      <span class="label">{html.escape(label)} ({conf:.2f}%)</span>
+                    </div>
+                    <div class="badge {badge_cls}">{html.escape(category)}</div>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with h2:
+            st.write("")
+            if st.button("Delete", key=f"del_{context}_{rid}", type="secondary"):
+                delete_prediction(rid)
+                st.success(f"Deleted #{rid}")
+                st.rerun()
+
+        # --- body: only Source + Title, and full body inside expander
+        if source:
+            st.caption(f"Source: {source}")
+        if title:
+            st.markdown(f"**Title:** {title}")
+
+        with st.expander("Show full body"):
+            st.markdown(full_text_safe)
+
+        st.write("")  # spacing
 
 
-def label_badge(label: str) -> str:
-    label = (label or "").strip().lower()
-    return "✅ REAL" if label == "real" else "❌ FAKE"
 
+# ---------------------------#
+# Sticky Navbar + Global CSS #
+# ---------------------------#
+ensure_state_defaults()
 
-# -------------------------
-# Header
-# -------------------------
-render_navbar()
-st.caption("Enter a title + body. Predictions are stored locally in SQLite (`data/predictions.sqlite3`).")
+logo_path = _find_logo_path()
+logo_b64 = _img_to_base64(logo_path) if logo_path else ""
 
+# Sidebar width used to offset navbar (approx; Streamlit varies by theme/viewport)
+SIDEBAR_W = "21rem"
+NAV_H = "5.4rem"
 
-# -------------------------
-# Sidebar filters
-# -------------------------
+st.markdown(
+    f"""
+    <style>
+      /* Hide default Streamlit header/footer */
+      header[data-testid="stHeader"] {{
+        display: none;
+      }}
+      footer {{
+        display: none;
+      }}
+
+      :root {{
+        --sidebar-w: {SIDEBAR_W};
+        --nav-h: {NAV_H};
+      }}
+
+      /* Make room for custom fixed navbar */
+      .block-container {{
+        padding-top: calc(var(--nav-h) + 0.8rem);
+      }}
+
+      /* Navbar (default assumes sidebar expanded) */
+      .upm-navbar {{
+        position: fixed;
+        top: 0;
+        left: var(--sidebar-w);
+        right: 0;
+        height: var(--nav-h);
+        z-index: 9999;
+        background: rgba(15, 18, 24, 0.92);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 1.4rem;
+      }}
+
+      /* Sidebar collapsed -> navbar full width */
+      section[data-testid="stSidebar"][data-collapsed="true"] ~ div .upm-navbar {{
+        left: 0 !important;
+      }}
+      div:has(> section[data-testid="stSidebar"][data-collapsed="true"]) .upm-navbar {{
+        left: 0 !important;
+      }}
+
+      /* Sidebar expanded -> navbar offset */
+      section[data-testid="stSidebar"][data-collapsed="false"] ~ div .upm-navbar {{
+        left: var(--sidebar-w) !important;
+      }}
+      div:has(> section[data-testid="stSidebar"][data-collapsed="false"]) .upm-navbar {{
+        left: var(--sidebar-w) !important;
+      }}
+
+      /* On small screens, sidebar collapses -> navbar should use full width */
+      @media (max-width: 992px) {{
+        .upm-navbar {{
+          left: 0 !important;
+        }}
+      }}
+
+      .upm-left {{
+        display: flex;
+        align-items: center;
+        gap: 0.9rem;
+        min-width: 300px;
+      }}
+      .upm-logo {{
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.06);
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }}
+      .upm-logo img {{
+        width: 38px;
+        height: 38px;
+        object-fit: contain;
+      }}
+      .upm-title {{
+        display: flex;
+        flex-direction: column;
+        line-height: 1.05;
+      }}
+      .upm-title h1 {{
+        font-size: 1.15rem;
+        margin: 0;
+        font-weight: 800;
+      }}
+      .upm-title span {{
+        font-size: 0.92rem;
+        opacity: 0.75;
+      }}
+      .upm-right {{
+        font-size: 0.95rem;
+        opacity: 0.85;
+        padding: 0.35rem 0.7rem;
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 999px;
+        white-space: nowrap;
+      }}
+
+      /* Prediction result box */
+      .result-box {{
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 14px;
+        padding: 14px;
+        margin-top: 14px;
+        background: rgba(255,255,255,0.03);
+      }}
+      .result-title {{
+        font-size: 1.15rem;
+        font-weight: 800;
+        margin-bottom: 6px;
+      }}
+
+      /* Cards for saved predictions */
+      .card {{
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 14px;
+        padding: 14px 14px 10px 14px;
+        margin-bottom: 14px;
+        background: rgba(255,255,255,0.03);
+      }}
+      .card-top {{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }}
+      .meta {{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-size: 0.98rem;
+      }}
+      .rid {{
+        font-weight: 800;
+      }}
+      .dot {{
+        opacity: 0.55;
+      }}
+      .label {{
+        font-weight: 650;
+      }}
+
+      .badge {{
+        font-weight: 900;
+        font-size: 1.05rem;
+        padding: 7px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.10);
+        white-space: nowrap;
+      }}
+      .cat-true {{
+        color: #32d583;
+        background: rgba(50,213,131,0.10);
+        border-color: rgba(50,213,131,0.22);
+      }}
+      .cat-false {{
+        color: #ff4d4f;
+        background: rgba(255,77,79,0.12);
+        border-color: rgba(255,77,79,0.25);
+      }}
+      .cat-amb {{
+        color: #fbbf24;
+        background: rgba(251,191,36,0.12);
+        border-color: rgba(251,191,36,0.25);
+      }}
+
+      /* Make expander body text preserve newlines */
+      .fulltext {{
+        white-space: pre-wrap;
+        line-height: 1.5;
+        opacity: 0.92;
+      }}
+    </style>
+
+    <div class="upm-navbar">
+      <div class="upm-left">
+        <div class="upm-logo">
+          {"<img src='data:image/png;base64," + logo_b64 + "' />" if logo_b64 else ""}
+        </div>
+        <div class="upm-title">
+          <h1>Fake News Detector — DistilBERT</h1>
+          <span>Deep Learning and Software Engineering</span>
+        </div>
+      </div>
+      <div class="upm-right">Universidad Politécnica de Madrid</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ----------------#
+# Sidebar filters #
+# ----------------#
 st.sidebar.header("Filters")
 
 label_filter = st.sidebar.selectbox("Label", ["All", "Real", "Fake"], index=0)
 sources = ["All"] + fetch_sources()
 source_filter = st.sidebar.selectbox("Source", sources, index=0)
 min_conf = st.sidebar.slider("Min confidence (%)", 0, 100, 0, 5)
-
 date_from = st.sidebar.text_input("Date from (YYYY-MM-DD)", value="")
 date_to = st.sidebar.text_input("Date to (YYYY-MM-DD)", value="")
 limit = st.sidebar.selectbox("Max rows", [10, 20, 50, 100], index=1)
 
+# ------------#
+# Main layout #
+# ------------#
+left, right = st.columns([1.2, 1.0], gap="large")
 
-# -------------------------
-# Main layout
-# -------------------------
-left, right = st.columns([1.25, 0.85], vertical_alignment="top")
-
+#-------------#
+#    Form     #
+#-------------#
 with left:
     st.subheader("Predict a News Article")
+    st.caption("Enter a title + body. Predictions are stored locally in SQLite.")
 
-    with st.form("predict_form"):
-        title = st.text_input("News Title", placeholder="Enter the headline/title...")
-        body = st.text_area("News Body", height=220, placeholder="Paste the article body here...")
-        source = st.text_input("News Source (optional)", placeholder="Reuters, CNN, BBC...")
-        date_str = st.text_input("Date (optional)", placeholder="YYYY-MM-DD")
-        submitted = st.form_submit_button("Predict")
+    fv = st.session_state["form_version"]
 
-    if submitted:
+    with st.form(f"predict_form_{fv}", clear_on_submit=False):
+        title = st.text_input(
+            "News Title",
+            placeholder="Enter the headline/title...",
+            key=f"news_title_{fv}",
+        )
+        body = st.text_area(
+            "News Body",
+            height=220,
+            placeholder="Paste the article body here...",
+            key=f"news_body_{fv}",
+        )
+        source = st.text_input(
+            "News Source (optional)",
+            placeholder="Reuters, CNN, BBC...",
+            key=f"news_source_{fv}",
+        )
+        date_str = st.text_input(
+            "Date (optional)",
+            placeholder="YYYY-MM-DD",
+            key=f"news_date_{fv}",
+        )
+
+        # Buttons Predict and Clear.
+        b1, b2, _spacer = st.columns([1, 1, 5])
+        with b1:
+            do_predict = st.form_submit_button("Predict")
+        with b2:
+            do_clear = st.form_submit_button("Clear")
+
+    if do_clear:
+        reset_form()
+
+    if do_predict:
         if not title.strip() and not body.strip():
             st.warning("Please provide at least a Title or Body.")
         else:
             out = predict(title=title, body=body, source=source, date_str=date_str)
+            st.session_state["last_result"] = out
             save_prediction(out)
 
-            st.markdown(
-                f"""
-                <div class="result-card">
-                  <div class="result-title">Prediction: {label_badge(out['label'])}</div>
-                  <div class="muted">Confidence: <b>{out['confidence_pct']:.2f}%</b></div>
-                  <div class="muted">Category: <b>{out['category']}</b></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+    # Render last result (persist until next clear)
+    if st.session_state.get("last_result"):
+        out = st.session_state["last_result"]
+        badge_cls = category_class(out.get("category", ""))
 
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Confidence", f"{out['confidence_pct']:.2f}%")
-            c2.metric("Prob Real", f"{out['prob_real'] * 100:.2f}%")
-            c3.metric("Prob Fake", f"{out['prob_fake'] * 100:.2f}%")
+        st.markdown(
+            f"""
+            <div class="result-box">
+              <div class="result-title">
+                {"✅ Prediction: REAL" if out["label"] == "Real" else "❌ Prediction: FAKE"}
+              </div>
+              <div class="badge {badge_cls}" style="margin-top:10px;">{html.escape(out["category"])}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-            with st.expander("Raw probabilities"):
-                st.json({"prob_fake": out["prob_fake"], "prob_real": out["prob_real"]})
+        # Metrics
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Confidence", f"{out['confidence_pct']:.2f}%")
+        c2.metric("Prob Real", f"{out['prob_real'] * 100:.2f}%")
+        c3.metric("Prob Fake", f"{out['prob_fake'] * 100:.2f}%")
+
+        with st.expander("Raw probabilities"):
+            st.json({"prob_fake": out["prob_fake"], "prob_real": out["prob_real"]})
 
 with right:
     st.subheader("Overview")
@@ -240,32 +438,35 @@ with right:
 
     st.metric("% Real", f"{pct_real:.1f}%")
     st.metric("Avg Confidence", f"{stats['avg_conf']:.2f}%")
+    st.info("Tip: Use sidebar filters to explore saved predictions.")
 
-    st.info("Use the sidebar filters to explore saved predictions.")
-
-
-# -------------------------
-# Saved predictions
-# -------------------------
 st.divider()
-st.subheader("Saved Predictions (Filtered)")
-
-rows = fetch_filtered(
-    label=label_filter,
-    source=source_filter,
-    min_conf=min_conf,
-    date_from=(date_from.strip() or None),
-    date_to=(date_to.strip() or None),
-    limit=limit,
-)
+st.subheader("Saved Predictions")
 
 tab_all, tab_real, tab_fake = st.tabs(["All", "Real", "Fake"])
 
+
+def _fetch_rows(effective_label: str):
+    return fetch_filtered(
+        label=effective_label,
+        source=source_filter,
+        min_conf=min_conf,
+        date_from=date_from.strip() or None,
+        date_to=date_to.strip() or None,
+        limit=limit,
+    )
+
+
 with tab_all:
-    render_rows(rows)
+    rows = _fetch_rows(label_filter)
+    render_rows(rows, context="tab_all")
 
 with tab_real:
-    render_rows([r for r in rows if (r.get("label") or "").lower() == "real"])
+    effective = "Real" if label_filter == "All" else label_filter
+    rows = _fetch_rows(effective)
+    render_rows(rows, context="tab_real")
 
 with tab_fake:
-    render_rows([r for r in rows if (r.get("label") or "").lower() == "fake"])
+    effective = "Fake" if label_filter == "All" else label_filter
+    rows = _fetch_rows(effective)
+    render_rows(rows, context="tab_fake")

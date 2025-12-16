@@ -143,3 +143,12 @@ def fetch_stats():
             "fake": int(fake),
             "avg_conf": float(avg_conf) if avg_conf is not None else 0.0
         }
+
+def delete_prediction(pred_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM predictions WHERE id = ?", (pred_id,))
+        conn.commit()
+    finally:
+        conn.close()
