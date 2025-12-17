@@ -421,9 +421,9 @@ with left:
         with st.expander("Raw probabilities"):
             st.json({"prob_fake": out["prob_fake"], "prob_real": out["prob_real"]})
 
-# ------------#
-#  Overview   #
-# ------------#
+#------------#
+# Overview   #
+#------------#
 with right:
     st.subheader("Overview")
     stats = fetch_stats()
