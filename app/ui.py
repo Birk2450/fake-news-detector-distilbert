@@ -160,7 +160,7 @@ st.markdown(
           border-bottom: 2px solid;
         }}
       
-      /* Dark theme */
+        /* Dark theme */
         @media (prefers-color-scheme: dark) {{
           .upm-navbar {{
             background: rgba(15, 18, 24, 0.92);
@@ -184,6 +184,7 @@ st.markdown(
             border-color: rgba(0, 0, 0, 0.10);
             color: black;
           }}
+        }}
 
       /* On small screens, sidebar collapses -> navbar should use full width */
       @media (max-width: 992px) {{
