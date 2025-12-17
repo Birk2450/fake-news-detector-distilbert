@@ -11,28 +11,18 @@ sys.path.insert(0, str(ROOT_DIR))
 from inference import predict
 from db import init_db, save_prediction, fetch_filtered, fetch_sources, fetch_stats, delete_prediction
 
-# -----------------------#
-# Page config + DB init  #
-# -----------------------#
+#-----------------------#
+# Page config + DB init #
+#-----------------------#
 st.set_page_config(page_title="Fake News Detector", layout="wide")
 init_db()
 
-# ----------------#
-# Helpers         #
-# ----------------#
+#----------------#
+#    Helpers     #
+#----------------#
 def _find_logo_path() -> Path | None:
-    candidates = [
-        ROOT_DIR / "app" / "assets" / "upm-logo.png",
-        ROOT_DIR / "app" / "assets" / "upm_logo.png",
-        ROOT_DIR / "assets" / "upm-logo.png",
-        ROOT_DIR / "upm-logo.png",
-        ROOT_DIR / "upm-logo.jpeg",
-        ROOT_DIR / "upm-logo.jpg",
-    ]
-    for p in candidates:
-        if p.exists():
-            return p
-    return None
+    logo_path = ROOT_DIR / "app" / "assets" / "upm-logo.png"
+    return logo_path if logo_path.exists() else None
 
 
 def _img_to_base64(path: Path) -> str:
@@ -82,8 +72,7 @@ def render_rows(rows, context: str = "all"):
 
         badge_cls = category_class(category)
 
-        # --- header row: left info + right delete button
-        h1, h2 = st.columns([6, 0.5])
+        h1, h2 = st.columns([6, 1])
         with h1:
             st.markdown(
                 f"""
@@ -122,7 +111,6 @@ def render_rows(rows, context: str = "all"):
         st.write("")  # spacing
 
 
-
 # ---------------------------#
 # Sticky Navbar + Global CSS #
 # ---------------------------#
@@ -158,36 +146,44 @@ st.markdown(
 
       /* Navbar (default assumes sidebar expanded) */
       .upm-navbar {{
-        position: fixed;
-        top: 0;
-        left: var(--sidebar-w);
-        right: 0;
-        height: var(--nav-h);
-        z-index: 9999;
-        background: rgba(15, 18, 24, 0.92);
-        backdrop-filter: blur(10px);
-        border-bottom: 1px solid rgba(255,255,255,0.08);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 1.4rem;
-      }}
-
-      /* Sidebar collapsed -> navbar full width */
-      section[data-testid="stSidebar"][data-collapsed="true"] ~ div .upm-navbar {{
-        left: 0 !important;
-      }}
-      div:has(> section[data-testid="stSidebar"][data-collapsed="true"]) .upm-navbar {{
-        left: 0 !important;
-      }}
-
-      /* Sidebar expanded -> navbar offset */
-      section[data-testid="stSidebar"][data-collapsed="false"] ~ div .upm-navbar {{
-        left: var(--sidebar-w) !important;
-      }}
-      div:has(> section[data-testid="stSidebar"][data-collapsed="false"]) .upm-navbar {{
-        left: var(--sidebar-w) !important;
-      }}
+          position: fixed;
+          top: 0;
+          left: var(--sidebar-w);
+          right: 0;
+          height: var(--nav-h);
+          z-index: 9999;
+          backdrop-filter: blur(10px);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 1.5rem;
+          border-bottom: 2px solid;
+        }}
+      
+      /* Dark theme */
+        @media (prefers-color-scheme: dark) {{
+          .upm-navbar {{
+            background: rgba(15, 18, 24, 0.92);
+            border-color: rgba(255, 255, 255, 0.08);
+            color: white;
+          }}
+          .upm-right {{
+            border-color: rgba(255, 255, 255, 0.10);
+            color: white;
+          }}
+        }}
+        
+        /* Light theme */
+        @media (prefers-color-scheme: light) {{
+          .upm-navbar {{
+            background: rgba(255, 255, 255, 0.92);
+            border-color: rgba(0, 0, 0, 0.08);
+            color: black;
+          }}
+          .upm-right {{
+            border-color: rgba(0, 0, 0, 0.10);
+            color: black;
+          }}
 
       /* On small screens, sidebar collapses -> navbar should use full width */
       @media (max-width: 992px) {{
@@ -195,7 +191,7 @@ st.markdown(
           left: 0 !important;
         }}
       }}
-
+      
       .upm-left {{
         display: flex;
         align-items: center;
@@ -355,7 +351,6 @@ left, right = st.columns([1.2, 1.0], gap="large")
 #-------------#
 with left:
     st.subheader("Predict a News Article")
-    st.caption("Enter a title + body. Predictions are stored locally in SQLite.")
 
     fv = st.session_state["form_version"]
 
@@ -383,7 +378,7 @@ with left:
         )
 
         # Buttons Predict and Clear.
-        b1, b2, _spacer = st.columns([1, 1, 5])
+        b1, b2, _spacer = st.columns([1, 1, 3])
         with b1:
             do_predict = st.form_submit_button("Predict")
         with b2:
@@ -426,18 +421,21 @@ with left:
         with st.expander("Raw probabilities"):
             st.json({"prob_fake": out["prob_fake"], "prob_real": out["prob_real"]})
 
+# ------------#
+#  Overview   #
+# ------------#
 with right:
     st.subheader("Overview")
     stats = fetch_stats()
     pct_real = (stats["real"] / stats["total"] * 100.0) if stats["total"] else 0.0
 
     a, b, c = st.columns(3)
-    a.metric("Total", stats["total"])
-    b.metric("Real", stats["real"])
-    c.metric("Fake", stats["fake"])
+    a.metric("Total Articles", stats["total"])
+    b.metric("Real News", stats["real"])
+    c.metric("Fake News", stats["fake"])
 
-    st.metric("% Real", f"{pct_real:.1f}%")
-    st.metric("Avg Confidence", f"{stats['avg_conf']:.2f}%")
+    st.metric("% of Real Articles", f"{pct_real:.1f}%")
+    st.metric("Avg Confidence of Model", f"{stats['avg_conf']:.2f}%")
     st.info("Tip: Use sidebar filters to explore saved predictions.")
 
 st.divider()
@@ -445,7 +443,9 @@ st.subheader("Saved Predictions")
 
 tab_all, tab_real, tab_fake = st.tabs(["All", "Real", "Fake"])
 
-
+#-------------------#
+# Saved Predictions #
+#-------------------#
 def _fetch_rows(effective_label: str):
     return fetch_filtered(
         label=effective_label,
